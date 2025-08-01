@@ -36,12 +36,12 @@ def create_prompt():
 
 @prompt_bp.route('', methods=['GET'])
 @jwt_required(optional=True)
-@cache.cached(timeout=30, query_string=True)  # Cache based on query string
+@cache.cached(timeout=60, query_string=True)  # Cache unique query combos for 60 sec
 def list_prompts():
     user_id = get_jwt_identity()
     query = Prompt.query
 
-    # Access control
+    # Follower access logic
     if user_id:
         followed = db.session.query(Follow.followed_id).filter_by(follower_id=user_id).subquery()
         query = query.filter(
@@ -52,17 +52,15 @@ def list_prompts():
     else:
         query = query.filter(Prompt.visibility == 'public')
 
-    # Full-text search
+    # Search + tag filters
     search = request.args.get('search')
     if search:
         query = query.filter(Prompt.search_vector.op('@@')(func.to_tsquery('english', search)))
 
-    # Tag filter
     tag = request.args.get('tag')
     if tag:
         query = query.filter(Prompt.tags.any(tag))
 
-    # Sorting
     sort = request.args.get('sort')
     if sort == 'likes':
         from app.models.like import Like
@@ -81,6 +79,7 @@ def list_prompts():
         "total": paginated.total,
         "prompts": [p.serialize() for p in paginated.items]
     })
+
 
 
 from app.utils.markdown import render_markdown
